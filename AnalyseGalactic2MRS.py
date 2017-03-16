@@ -18,7 +18,7 @@ hp.mollview(twomrsprojectedmap, title='2MRS projected map, 2 degree smoothing')
 plt.show()
 plt.savefig('2MRSprojectedmap.png')
 
-flist = sorted(glob('Outputs/1_1/MinEn53.0_N10_SpecI4.3_Seq60?GalBack_Manual.txt'))
+flist = sorted(glob('/nbi/home/mrameez/UHECRProject/Outputs/1_1/MinEn53.0_N10_SpecI4.3_Seq60?GalBack_Manual.txt'))
 
 print len(flist), 'files found'
 
@@ -60,6 +60,7 @@ defpixs = hp.ang2pix(128, np.deg2rad(90.-defdec), np.deg2rad(defra))
 weights = twomrsprojectedmap[defpixs]
 
 earthmap = weightedscattomap(dec, ra, weights, 128)
+np.savetxt('2MRSEarthmap.txt', earthmap, delimiter="|")
 
 hp.mollview(earthmap, title='Map at Earth, backpropagated weighted by 2MRS sources')
 plt.show()

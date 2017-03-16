@@ -48,7 +48,7 @@ def get_alms_iso(events, l_max):
 			alms[lm2i(l, m)] = np.mean(realYlm(l, m, events["theta"], events["phi"]))
 	return alms
 
-def alms_exposure_K(events, l_max, Kinv):
+def get_alms_exposure_K(events, l_max, Kinv):
 	# requiring Kinv is slow
 	# either K_matrix(inverse = True) or np.linalg.inv(K) gives similar results
 	blms = np.empty((l_max + 1) ** 2) # the uncorrected alms
