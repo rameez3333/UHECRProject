@@ -4,9 +4,10 @@ from scipy.stats import chi2
 from scipy.integrate import quad
 from scipy.special import lpmv
 from scipy.optimize import fsolve
+from healpy.sphtfunc import Alm
 
 import CR_funcs as CR
-import KMatrix as KM
+#import KMatrix as KM
 
 def realYlm(l, m, theta, phi):
 	if abs(m) > l: return 0
@@ -109,3 +110,37 @@ def Cl_region(l, N, p):
 		init[0] = 0.6 * dof
 	return fsolve(func, init) / (dof * 4 * np.pi * N)
 
+def cplx2real_alms(cplx_alms):
+	"""
+	convert healpy's complex alms to denton's real alms
+	"""
+	l_max = Alm.getlmax(len(cplx_alms))
+	real_alms = np.zeros((l_max + 1) ** 2)
+
+	for i in xrange(len(cplx_alms)):
+		l, m = Alm.getlm(l_max, i)
+		if m == 0:
+			real_alms[lm2i(l, m)] = cplx_alms[i].real
+		else:
+			real_alms[lm2i(l, m)] = np.sqrt(2) * cplx_alms[i].real
+			real_alms[lm2i(l, -m)] = -(-1) ** m * np.sqrt(2) * cplx_alms[i].imag
+	return real_alms
+
+def real2cplx_alms(real_alms):
+	"""
+	convert denton's complex alms to healpy's real alms
+	"""
+	l_max = np.sqrt(len(real_alms)) - 1
+	assert l_max == int(l_max)
+	l_max = int(l_max)
+
+	cplx_alms = np.zeros(Alm.getsize(l_max), dtype = complex)
+	for i in xrange(len(real_alms)):
+		l, m = i2lm(i)
+		if m == 0:
+			cplx_alms[Alm.getidx(l_max, l, m)] = real_alms[i]
+		if m < 0:
+			cplx_alms[Alm.getidx(l_max, l, abs(m))] += -(-1) ** m * 1j * real_alms[i] / np.sqrt(2)
+		if m > 0:
+			cplx_alms[Alm.getidx(l_max, l, m)] += real_alms[i] / np.sqrt(2)
+	return cplx_alms
