@@ -5,6 +5,7 @@ from scipy.integrate import quad
 from scipy.special import lpmv
 from scipy.optimize import fsolve
 from healpy.sphtfunc import Alm
+import healpy as hp
 
 import CR_funcs as CR
 #import KMatrix as KM
@@ -144,3 +145,15 @@ def real2cplx_alms(real_alms):
 		if m > 0:
 			cplx_alms[Alm.getidx(l_max, l, m)] += real_alms[i] / np.sqrt(2)
 	return cplx_alms
+
+def fname2real_alms(fname, l_max):
+	the_map = np.genfromtxt(fname)
+	the_map = hp.pixelfunc.ud_grade(the_map, 128, pess = True, power = 1.)
+	the_map /= the_map.sum()
+	the_map = hp.smoothing(the_map, sigma = np.deg2rad(2), verbose = False)
+	the_map -= 1. * np.min(the_map)
+	the_map /= the_map.sum()
+	cplx_alms = hp.sphtfunc.map2alm(the_map, l_max)
+	real_alms = cplx2real_alms(cplx_alms)
+	return real_alms
+
