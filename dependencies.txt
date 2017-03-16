@@ -1,0 +1,7 @@
+python2.7
+python-scipy
+python-numpy
+python-astropy
+python-healpy
+
+CRPropa3
