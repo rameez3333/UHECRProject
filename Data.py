@@ -17,7 +17,14 @@ def load_Auger(E_min):
 	mask = Auger_events["E"] > E_min
 	Auger_events = Auger_events[mask]
 
-	return Auger_events
+
+	# add a dtype
+	Auger_events_ = np.empty(Auger_events.shape, dtype = dt + [("is_Auger", "b")])
+	for name in Auger_events.dtype.names:
+		Auger_events_[name] = Auger_events[name]
+	Auger_events_["is_Auger"] = True
+
+	return Auger_events_
 
 def load_TA(E_min, purge_hotspot = False):
 	dts			= ["E",	"RA",	"dec",	"l",	"b"]
@@ -50,7 +57,13 @@ def load_TA(E_min, purge_hotspot = False):
 		print "TA hotspot events:", count_total, "  Removed", count_removed, "events"
 		TA_events = TA_events[mask]
 
-	return TA_events
+	# add a dtype
+	TA_events_ = np.empty(TA_events.shape, dtype = dt + [("is_Auger", "b")])
+	for name in TA_events.dtype.names:
+		TA_events_[name] = TA_events[name]
+	TA_events_["is_Auger"] = False
+
+	return TA_events_
 
 def load_Auger_TA(E_min_Auger = None, E_min_TA = None, E_scale = None, purge_hotspot = False):
 	assert [E_min_Auger, E_min_TA, E_scale].count(None) <= 1
