@@ -2,21 +2,21 @@ import numpy as np
 from scipy.stats import chi2
 
 def get_chisq(alms1, alms2, N):
-	"""
-	alms = [(1,-1),(1,0),(1,1),(2,-2),...]
-	N is the number of events that lead to the data sample
-	"""
 	assert len(alms1) == len(alms2)
-	l_max = np.sqrt(len(alms1))
+	l_max = np.sqrt(len(alms1)) - 1
 	assert l_max == int(l_max)
+
 	alm_std = 1. / np.sqrt(4 * np.pi * N)
+
 	chisq = 0
 	for i in xrange(1, len(alms1)): # no information in ell=0
 		chisq += ((alms1[i] - alms2[i]) / alm_std) ** 2
 	return chisq
 
-def p_value(chisq, l_max):
-	dof = (l_max + 1) ** 2 - 1 # -1 because there is no information in the ell = 0 mode
+def p_value(chisq, l_max = None, dof = None):
+	assert [l_max, dof].count(None) <= 1
+	if dof == None:
+		dof = (l_max + 1) ** 2 - 1 # -1 because there is no information in the ell = 0 mode
 	return chi2.sf(chisq, dof)
 
 if __name__ == "__main__":

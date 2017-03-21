@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import chi2
 from scipy.integrate import quad
-from scipy.special import lpmv
+from scipy.special import lpmv, sph_harm
 from scipy.optimize import fsolve
 from healpy.sphtfunc import Alm
 import healpy as hp
@@ -10,18 +10,9 @@ import healpy as hp
 import CR_funcs as CR
 #import KMatrix as KM
 
-def realYlm(l, m, theta, phi):
-	if abs(m) > l: return 0
-	theta = np.array(theta)
-	phi = np.array(phi)
-	x = np.cos(theta)
-	if m == 0:
-		return np.sqrt((2 * l + 1) / (4 * np.pi)) * lpmv(0, l, x)
-	N = np.sqrt((2 * l + 1) / (4 * np.pi)) * np.sqrt(factorial_ratio(l - abs(m), l + abs(m)))
-	P = lpmv(abs(m), l, x)
-	if m < 0:
-		return np.sqrt(2) * N * P * np.sin(abs(m) * phi)
-	return np.sqrt(2) * N * P * np.cos(m * phi)
+def cplxYlm(l, m, theta, phi):
+	# phi -> -phi relates scipy with healpy
+	return sph_harm(m, l, -phi, theta)
 
 def factorial_ratio(top, bottom):
 	if top == bottom:
@@ -40,16 +31,17 @@ def i2lm(i):
 
 def get_alms_iso_exact(l_max):
 	assert l_max == int(l_max)
-	return np.zeros((int(l_max) + 1) ** 2)
+	return np.zeros(Alm.getsize(l_max), dtype = complex)
 
 def get_alms_iso(events, l_max):
-	alms = np.empty((l_max + 1) ** 2)
+	cplx_alms = np.zeros(Alm.getsize(l_max), dtype = complex)
 	for l in xrange(l_max + 1):
-		for m in xrange(-l, l + 1):
-			alms[lm2i(l, m)] = np.mean(realYlm(l, m, events["theta"], events["phi"]))
-	return alms
+		for m in xrange(l + 1):
+			cplx_alms[Alm.getidx(l_max, l, m)] = np.mean(cplxYlm(l, m, events["theta"], events["phi"]))
+	return cplx_alms
 
 def get_alms_exposure_K(events, l_max, Kinv):
+	return -1
 	# requiring Kinv is slow
 	# either K_matrix(inverse = True) or np.linalg.inv(K) gives similar results
 	blms = np.empty((l_max + 1) ** 2) # the uncorrected alms
@@ -73,11 +65,11 @@ def get_alms_exposure(events, l_max, ff):
 		names[idx] = phi_field
 		events.dtype.names = names
 
-	exposure_alms = np.empty((l_max + 1) ** 2)
+	exposure_alms = np.zeros(Alm.getsize(l_max), dtype = complex)
 	for l in xrange(l_max + 1):
-		for m in xrange(-l, l + 1):
-			alms = realYlm(l, m, CR.dec2theta(events["dec"]), events["phi"]) / omegas
-			exposure_alms[lm2i(l, m)] = np.sum(alms)
+		for m in xrange(l + 1):
+			cplx_alms = cplxYlm(l, m, CR.dec2theta(events["dec"]), events["phi"]) / omegas
+			exposure_alms[Alm.getidx(l_max, l, m)] = np.sum(cplx_alms)
 	return exposure_alms / (exposure_alms[0] * np.sqrt(4 * np.pi)) # normalize the alms so that a00 = 1/sqrt(4pi)
 
 def get_Cls(alms):
@@ -129,7 +121,7 @@ def cplx2real_alms(cplx_alms):
 
 def real2cplx_alms(real_alms):
 	"""
-	convert denton's complex alms to healpy's real alms
+	convert denton's real alms to healpy's complex alms
 	"""
 	l_max = np.sqrt(len(real_alms)) - 1
 	assert l_max == int(l_max)
@@ -153,7 +145,18 @@ def fname2real_alms(fname, l_max):
 	the_map = hp.smoothing(the_map, sigma = np.deg2rad(2), verbose = False)
 	the_map -= 1. * np.min(the_map)
 	the_map /= the_map.sum()
+
+#	the_map[hp.pixelfunc.ang2pix(128, np.pi/2 - 0.222, 3.26)] += 0.1 # virgo cluster in equatorial coordinates
+#	the_map[hp.pixelfunc.ang2pix(128, 1.23, 5.4)] += 0.1 # cen a in galactic coordinates
+
 	cplx_alms = hp.sphtfunc.map2alm(the_map, l_max)
+
+	cplx_alms /= cplx_alms[Alm.getidx(l_max, 0, 0)]
+	cplx_alms /= np.sqrt(4 * np.pi)
+	
+#	hp.visufunc.mollview(hp.sphtfunc.alm2map(cplx_alms, 128))
+#	plt.show()
+	
 	real_alms = cplx2real_alms(cplx_alms)
 	return real_alms
 

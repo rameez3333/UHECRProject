@@ -2,16 +2,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import quad
 
-a_0_auger = -35.2 * np.pi / 180
-theta_m_auger = 80 * np.pi / 180
+a_0_Auger = -35.2 * np.pi / 180
+theta_m_Auger = 80 * np.pi / 180
 a_0_TA = 39.3 * np.pi / 180
 theta_m_TA = 55 * np.pi / 180
 dec_min = a_0_TA - theta_m_TA
-dec_max = a_0_auger + theta_m_auger
-def omega_one_exp(dec, auger, fudge_factor):
-	if auger:
-		a_0 = a_0_auger
-		theta_m = theta_m_auger
+dec_max = a_0_Auger + theta_m_Auger
+def omega_one_exp(dec, Auger, fudge_factor):
+	if Auger:
+		a_0 = a_0_Auger
+		theta_m = theta_m_Auger
 	else:
 		a_0 = a_0_TA
 		theta_m = theta_m_TA
@@ -31,7 +31,7 @@ def omega_one_exp(dec, auger, fudge_factor):
 		else:
 			alpha_m[i] = np.arccos(xi[i])
 
-	if auger:
+	if Auger:
 		correction = fudge_factor
 	else:
 		correction = 1
@@ -40,11 +40,11 @@ def omega_one_exp(dec, auger, fudge_factor):
 def omega(dec, ff):
 	return omega_one_exp(dec, True, ff) + omega_one_exp(dec, False, ff)
 	
-def fudge(N_auger, N_TA):
+def fudge(N_Auger, N_TA):
 	# use the uncorrected exposures here
 	int_TA = quad(lambda dec: np.cos(dec) * omega_one_exp(dec, False, 1), dec_min, dec_max)[0]
-	int_auger = quad(lambda dec: np.cos(dec) * omega_one_exp(dec, True, 1), dec_min, dec_max)[0]
-	return N_auger * int_TA / (N_TA * int_auger)
+	int_Auger = quad(lambda dec: np.cos(dec) * omega_one_exp(dec, True, 1), dec_min, dec_max)[0]
+	return N_Auger * int_TA / (N_TA * int_Auger)
 
 def cos_angle_between(dec1, RA1, dec2, RA2):
 	theta1 = dec2theta(dec1)

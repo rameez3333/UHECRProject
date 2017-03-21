@@ -49,6 +49,7 @@ def load_TA(E_min, purge_hotspot = False):
 					count_removed += 1
 		print "TA hotspot events:", count_total, "  Removed", count_removed, "events"
 		TA_events = TA_events[mask]
+
 	return TA_events
 
 def load_Auger_TA(E_min_Auger = None, E_min_TA = None, E_scale = None, purge_hotspot = False):
