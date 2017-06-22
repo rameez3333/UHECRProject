@@ -8,6 +8,7 @@ a_0_TA = 39.3 * np.pi / 180
 theta_m_TA = 55 * np.pi / 180
 dec_min = a_0_TA - theta_m_TA
 dec_max = a_0_Auger + theta_m_Auger
+
 def omega_one_exp(dec, Auger, fudge_factor):
 	if Auger:
 		a_0 = a_0_Auger
@@ -56,4 +57,36 @@ def cos_angle_between(dec1, RA1, dec2, RA2):
 # same as vice versa
 def dec2theta(dec):
 	return np.pi / 2 - dec
+
+def r_angles(N, ff = 1, detector = "None"):
+	ret = np.empty(N, dtype = [("dec", "f"), ("RA", "f")])
+	ret["RA"] = 2 * np.pi * np.random.rand(N)
+
+	detector = detector.lower()
+	Augers = ["auger", "pao", "a", "p"]
+	TAs = ["ta", "t"]
+	Boths = ["both", "b"]
+
+	if detector in Augers:
+		omega_max = omega_one_exp(-np.pi / 2, True, ff)
+	if detector in TAs:
+		omega_max = omega_one_exp(np.pi / 2, False, ff)
+	if detector in Boths:
+		omega_max = omega(-np.pi / 2, True, ff)
+
+	if detector in [None, "none", "n"]:
+		decs = np.arcsin(2 * np.random.rand(N) - 1)
+	else:
+		count = 0
+		while count < N:
+			dec = np.arcsin(2 * np.random.rand() - 1)
+			if detector in Augers:
+				if omega_max * np.random.rand() > omega_one_exp(dec, True, ff):		continue
+			if detector in TAs:
+				if omega_max * np.random.rand() > omega_one_exp(dec, False, ff):	continue
+			if detector in Boths:
+				if omega_max * np.random.rand() > omega(dec, ff):					continue
+			ret["dec"][count] = dec
+			count += 1
+	return ret
 

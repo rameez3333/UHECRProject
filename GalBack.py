@@ -41,8 +41,8 @@ obs = Observer()
 obs.add(ObserverLargeSphere(Vector3d(0), 20 * kpc))
 sim.add(obs)
 
-output = TextOutput('Outputs/'+str(massno)+'_'+str(atomicno)+'/MinEn'+str(minenerg)+'_N'+str(howmany)+'_SpecI'+str(detectedspectralindex)+'_Seq'+str(sequence)+'GalBack.txt', Output.Event3D)
-sim.add(output)
+#output = TextOutput('Outputs/'+str(massno)+'_'+str(atomicno)+'/MinEn'+str(minenerg)+'_N'+str(howmany)+'_SpecI'+str(detectedspectralindex)+'_Seq'+str(sequence)+'GalBack.txt', Output.Event3D)
+#sim.add(output)
 
 def generatepowerlaw(index, rmin, rmax, size):
     arr = np.random.uniform(np.power(rmin, -1.*index), np.power(rmax, -1.*index), size)
@@ -59,13 +59,17 @@ def propagate(A, Z, energy, lat, lon, seq=0):
     sim.run(c)
     #print c
     d1 = c.current.getDirection()  # direction at galactic border
+    p1 = c.current.getPosition()
     #print 'galactic deflection %.2f radian' % direction.getAngleTo(d1)
     #print 'Direction', direction
     #print 'D1', d1
     lonr = d1.getPhi()
     latr = d1.getTheta()
+    lonp = p1.getPhi()
+    latp = p1.getTheta()
+    
     #print lon, lat, lonr, latr, energy
-    return lonr+np.pi, np.pi/2. - latr
+    return lonr+np.pi, np.pi/2. - latr, lonp+np.pi, np.pi/2.-latp
     
 energies = generatepowerlaw(detectedspectralindex, minenerg, 200., 100000)    
 
@@ -77,8 +81,8 @@ for i in range(0, hp.nside2npix(nside)):
     lon = np.deg2rad(SkyCoord(ra = ra*u.radian, dec=dec*u.radian).galactic.l.value)
     for j in range(0, howmany):
         energy = np.random.choice(energies)
-        lonr, latr = propagate(massno, atomicno, energy, np.pi/2. - lat, lon - np.pi)
-        fout.write(str(lat)+'|'+str(lon)+'|'+str(energy)+'|'+str(latr)+'|'+str(lonr)+'\n')
+        lonr, latr, lonp, latp = propagate(massno, atomicno, energy, np.pi/2. - lat, lon - np.pi)
+        fout.write(str(lat)+'|'+str(lon)+'|'+str(energy)+'|'+str(latr)+'|'+str(lonr)+'|'+str(latp)+'|'+str(lonp)+'\n')
         #direction = Vector3d()
         #direction.setRThetaPhi(1, lat, lon)
         #d1 = Vector3d()

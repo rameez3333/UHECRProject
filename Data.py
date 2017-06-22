@@ -2,6 +2,7 @@ import numpy as np
 
 import CR_funcs as CR
 
+# energy in EeV, angles in radians
 def load_Auger(E_min):
 	dts			= ["E",	"RA",	"dec",	"l",	"b"]
 	cols		= (3,	4,		5,		6,		7)
@@ -26,6 +27,7 @@ def load_Auger(E_min):
 
 	return Auger_events_
 
+# energy in EeV, angles in radians
 def load_TA(E_min, purge_hotspot = False):
 	dts			= ["E",	"RA",	"dec",	"l",	"b"]
 	cols		= (7,	8,		9,		10,		11)
