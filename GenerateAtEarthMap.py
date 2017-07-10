@@ -11,10 +11,30 @@ from astropy.cosmology import Planck15 as cosmo
 import Data
 import CR_funcs as CR
 import os, sys
+from optparse import OptionParser
 
-fnametoproc = sys.argv[1]
+usage = 'usage: %prog [options]'
+parser = OptionParser(usage)
 
-allflist = sorted(glob(fnametoproc))
+parser.add_option("-a", "--massnumber", action="store", type="int", default=56, dest="MASSNUMBER", help="The Atomic Mass Number (A) of the Nucleus")
+parser.add_option("-z", "--atomicnumber", action="store", type="int", default=26, dest="ATOMICNUMBER", help="The Atomic Number (Z) of the Nucleus")
+parser.add_option("-s", "--spectralindex", action="store", type="float", default=2.0, dest="SPECTRALINDEX", help="The Spectral Index at Injection")
+parser.add_option("-d", "--density", action="store", type="float", default=1.e-4, dest="DENSITYSOUCE", help="UHECR source density in/MPc^3")
+parser.add_option("-b", "--magneticfield", action="store", type="float", default=1.e-10, dest="MAGFIELD", help="The extragalactic magnetic field (in Gauss)")
+parser.add_option("-p", "--PT2011", action = "store_true", default=False, dest="PT2011", help = "Use the Pshirkov 2011 Field instead of the JF2012 default?")
+
+(options, args) = parser.parse_args()
+
+A = options.MASSNUMBER
+Z = options.ATOMICNUMBER
+Density = options.DENSITYSOUCE
+spectralindex = options.SPECTRALINDEX
+magfield = options.MAGFIELD
+
+fnamebase = 'ProjectedMaps5/EGal_Injection_'+str(A)+'_'+str(Z)+'_SpecIndex_'+str(spectralindex)+'_Den_'+str(Density)+'_EgalMag_'+str(magfield)+'_S*_Map.txt'
+
+
+allflist = sorted(glob(fnamebase))
 
 E_min_Auger = 57
 E_scale = 1.13
@@ -128,26 +148,42 @@ def ProcessMap(fname):
     print 'Processing :', fname
     import matplotlib.pyplot as plt
     A = int(fname[fname.find('ion_')+4:fname.find('ion_')+6].replace('_',''))
-    Z = int(fname[fname.find(str(A))+2:fname.find(str(A))+5].replace('_',''))
+    Z = int(fname[fname.find(str(A))+2:fname.find(str(A))+len(str(A))+3].replace('_',''))
     spec = float(fname[fname.find('Index')+6:fname.find('Index')+9])
     mag = float(fname[fname.find('Mag')+4:fname.find('Mag')+9])
     density = float(fname[fname.find('Den_')+4:fname.find('_Egal')])
     key = str(A)+'_'+str(spec)+'_'+str(density)+str(mag)
-    
+    print 'Specs ', A, Z, spec, mag, density
     arr = np.genfromtxt(fname, delimiter='|')
+    if np.any(np.isnan(arr[0])):
+        print 'Finding Nans'
+        return np.nan
     fname = 'Outputs/'+str(A)+'_'+str(Z)+'/'+fname
     egalmap = arr[0]
+    arr[1][np.isnan(arr[1])] = np.nanmean(arr[1])
     zmap = inv_comoving_distance(arr[1])
     comp5map = np.round(comp5dict[key](zmap))
     comp1map = np.round(comp1dict[key](zmap))
     comp9map = np.round(comp9dict[key](zmap))
+    compsdmap = (comp9map-comp1map)/4.
+    if np.any(np.isnan(compsdmap)):
+        print 'Nans in compsdmap'
+    if len(compsdmap[compsdmap==0.]):
+        print 'Zeros in compsdmap'
+    comp5map = (comp5map+Z)/2.
+    
+    
+    
     print 'Min, Med, Max of composition', np.min(comp1map), np.median(comp5map), np.max(comp9map)
     mincomp, medcom, maxcomp = np.min(comp1map), np.median(comp5map), np.max(comp9map)
-    reqcomps=range(int(mincomp), int(A+1))
+    if mincomp>Z:
+        mincomp = Z-10
+    reqcomps=range(int(mincomp), int(Z+1))
     en5map = en5dict[key](zmap)
     en1map = en1dict[key](zmap)
     en9map = en9dict[key](zmap)
     print 'Min, Med, Max of Energy', np.min(en1map), np.median(en5map), np.max(en9map)
+    
     
     if not len(evdict.keys()):
         print 'Looking for all Galactic backtrack files in the z range:', reqcomps[0], reqcomps[-1]
@@ -161,14 +197,19 @@ def ProcessMap(fname):
             print 'found ', len(flist), 'files for composition ', comp
             if not len(flist):
                 continue
-            evarr = np.genfromtxt(flist[0], delimiter="|").transpose()
-            for fnamen in flist[1:]:
-                print fnamen
-                now = np.genfromtxt(fnamen, delimiter="|").transpose()
-                print len(now[0]), 'events found'
-                evarr = np.append(evarr, now , axis=1)
-            evdict[comp] = evarr
-            evweightdict[comp] = 1./float(len(flist))
+            try:
+                evarr = np.genfromtxt(flist[0], delimiter="|").transpose()
+                if not len(evarr):
+                    continue
+                for fnamen in flist[1:]:
+                    print fnamen
+                    now = np.genfromtxt(fnamen, delimiter="|").transpose()
+                    print len(now[0]), 'events found'
+                    evarr = np.append(evarr, now , axis=1)
+                evdict[comp] = evarr
+                evweightdict[comp] = 1./float(len(flist))
+            except:
+                print 'Bah'
 
         
     posweightedmap = {}
@@ -189,27 +230,62 @@ def ProcessMap(fname):
             defdec = defcoord.icrs.dec.value
 
             defmap = scattomap(defdec, defra, nside=32)
-            plt.figure(pltcount)
-            hp.mollview(defmap, title='Backpropagated Map at Galactic border, isotropic at Earth')
+            #plt.figure(pltcount)
+            #hp.mollview(defmap, title='Backpropagated Map at Galactic border, isotropic at Earth')
             #plt.show()
-            plt.savefig(fname.replace('.txt', str(comp)+'JusDefs.png'))
-            pltcount=pltcount+1
+            #plt.savefig(fname.replace('.txt', str(comp)+'JusDefs.png'))
+            #pltcount=pltcount+1
             defpixs = hp.ang2pix(32, np.deg2rad(90.-defdec), np.deg2rad(defra))
+            compweight = 1./(compsdmap*np.sqrt(2.*np.pi))*np.exp(-0.5*(comp5map - comp)*(comp5map - comp)/(compsdmap*compsdmap))
+            if np.any(np.isnan(compweight)):
+                print 'Nans in compweight'
+                plt.figure(pltcount)
+                hp.mollview(compweight, title=str(comp))
+                plt.show()
+                pltcount+=1
+                
+                compweight[np.isnan(compweight)]=np.nanmean(compweight)
+            if A==1:
+                compweight = np.ones(hp.nside2npix(32))
             weights = egalmap[defpixs]#Add Spectral weight map here
-            posweightedmap[comp] = weightedscattomap(dec, ra, weights, 32)*evweightdict[comp]
+            posweightedmap[comp] = weightedscattomap(dec, ra, weights, 32)*evweightdict[comp]*compweight
+            if np.any(np.isnan(posweightedmap[comp])):
+                print comp, evweightdict[comp], compweight
+                
             mainmap = mainmap+posweightedmap[comp]
     
     mainmap = mainmap/np.sum(mainmap)
+    
+    print mainmap, len(mainmap)
+    
     plt.figure(pltcount)
     hp.mollview(mainmap, title='Earth Map')
+    np.savetxt(fname.replace('EGal_Injection_', 'AtEarthMap2_'), mainmap)
     plt.savefig(fname.replace('.txt', str(comp)+'EarthMap.png'))
     #plt.show()
     del plt
     return mainmap
     
+if len(allflist):
+    fout = open('Outputs/GalSummary5_'+str(A)+'_'+str(Z)+'_SpecIndex_'+str(spectralindex)+'_Den_'+str(Density)+'_EgalMag_'+str(magfield)+'.txt', "w")
+
 for toproc in allflist:
     mapinstance = ProcessMap(toproc)
-    print toproc, logLikelihood(mapinstance)
+    print np.sum(mapinstance), mapinstance
+    hp.mollview(mapinstance)
+    plt.show()
+    try:
+        if not np.any(np.isnan(mapinstance)):
+            llh = logLikelihood(mapinstance)
+            print toproc, llh
+        else:
+            llh = np.nan
+        fout.write(toproc+ '|' + str(llh)+ ' \n')
+    except:
+        print 'Something Fucked up'
+    
+fout.close()
+    
 
 
 """

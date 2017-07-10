@@ -9,6 +9,8 @@ from astropy.cosmology import Planck15 as cosmo
 import math
 from optparse import OptionParser
 from wquantiles import quantile
+from astropy import units as u
+from astropy.coordinates import SkyCoord
 #import multiprocessing
 #pool = multiprocessing.Pool()
 
@@ -21,6 +23,7 @@ parser.add_option("-a", "--massnumber", action="store", type="int", default=56, 
 parser.add_option("-z", "--atomicnumber", action="store", type="int", default=26, dest="ATOMICNUMBER", help="The Atomic Number (Z) of the Nucleus")
 parser.add_option("-l", "--zslices", action="store", type="int", default=30, dest="ZSLICES", help="The number of Z slices")
 parser.add_option("-n", "--nsamples", action="store", type="int", default=1, dest="NSAMPLES", help="The number of MC maps to make")
+parser.add_option("-i", "--ioffset", action="store", type="int", default=0, dest="IOFFSET", help="Index Offset")
 parser.add_option("-d", "--density", action="store", type="float", default=1.e-4, dest="DENSITYSOUCE", help="UHECR source density in/MPc^3")
 parser.add_option("-m", "--evolution", action="store", type="float", default=3.0, dest="MEVOL", help="Index of UHECR evolution")
 parser.add_option("-b", "--magneticfield", action="store", type="float", default=1.e-10, dest="MAGFIELD", help="The extragalactic magnetic field (in Gauss)")
@@ -28,6 +31,7 @@ parser.add_option("-r", "--radius", action="store", type="float", default=300., 
 parser.add_option("-s", "--spectralindex", action="store", type="float", default=2.0, dest="SPECTRALINDEX", help="The Spectral Index at Injection")
 parser.add_option("-p", "--plots", action = "store_true", default=False, dest="PLOTS", help = "Whether to make plots")
 parser.add_option("-o", "--otpf", action = "store_true", default=True, dest="OTPF", help = "One time plots and figures?")
+parser.add_option("-f", "--lumfunc", action = "store_true", default=False, dest="LUMFUNC", help = "Use a luminosity function instead of standard candle sources?")
 (options, args) = parser.parse_args()
 
 
@@ -38,8 +42,11 @@ colours = ['red', 'blue', 'green', 'yellow', 'brown', 'purple', 'magenta', 'cyan
 
 ethresh = 53.0
 
-def scattomap(dec,ra, nside=NSIDE):
-    hmap = np.bincount(hp.ang2pix(nside, np.deg2rad(90.-dec), np.deg2rad(ra)), minlength=hp.nside2npix(nside))
+galpixindexlist=None
+restindexlist=None
+
+def scattomap(dec,ra, nside=NSIDE, weights=None):
+    hmap = np.bincount(hp.ang2pix(nside, np.deg2rad(90.-dec), np.deg2rad(ra)), minlength=hp.nside2npix(nside), weights=weights)
     return hmap
 
 A = options.MASSNUMBER
@@ -53,8 +60,13 @@ magfield = options.MAGFIELD
 nsamples=options.NSAMPLES
 plots=options.PLOTS
 otpf = options.OTPF
+offset = options.IOFFSET
+lumfunc = options.LUMFUNC
 
-fnamebase = 'ProjectedMaps/EGal_Injection_'+str(A)+'_'+str(Z)+'_SpecIndex_'+str(spectralindex)+'_Den_'+str(Density)+'_EgalMag_'+str(magfield)+'_'
+fnamebase = 'ProjectedMaps6/EGal_Injection_'+str(A)+'_'+str(Z)+'_SpecIndex_'+str(spectralindex)+'_Den_'+str(Density)+'_EgalMag_'+str(magfield)+'_'
+
+if lumfunc:
+    fnamebase = fnamebase+'LumFunc_'
 
 Volume = 4./3.*np.pi*np.power(Radius, 3.)
 nsources = int(Density*Volume)
@@ -73,12 +85,26 @@ def CodeToAZ(code):
 
 class TwoMRSMap:
     def __init__(self, rawmap, mtype="SourceDist", smoothing = 0.0):
+        global galpixindexlist
+        global restindexlist
+        if  galpixindexlist==None:
+            indices = np.arange(hp.nside2npix(NSIDE))
+            theta, phi = hp.pix2ang(NSIDE, indices)
+            dec, ra = 90. - np.rad2deg(theta), np.rad2deg(phi)
+            galb = SkyCoord(ra = ra*u.degree, dec=dec*u.degree).galactic.b.value
+            galpixindexlist = indices[np.absolute(galb)<5.]
+            restindexlist = indices[np.absolute(galb)>=5.]
+            print 'Total to Masked ratio', len(indices) / len(galpixindexlist)
         if mtype=="SourceDist":
-            self.EqNormMap=self.MapToEqNorm(rawmap, smoothing)
+            self.EqNormMap, self.PosMap=self.MapToEqNorm(rawmap, smoothing)
+        elif mtype=="TwoMRSDist":
+            rawmap[galpixindexlist] = rawmap[np.random.choice(restindexlist, len(galpixindexlist))]
+            self.EqNormMap, self.PosMap=self.MapToEqNorm(rawmap, smoothing)
         else:
             print PF("err"), "mtype==\""+mtype+"\" unknown"
             exit(1)
         self.SigWeight={}
+
 
     def MapToEqNorm(self,eqmap, smoothing):
         print 'wtf', eqmap, np.sum(eqmap) 
@@ -87,13 +113,16 @@ class TwoMRSMap:
                 print PF("warn"),"rebinning EqNormMap to ",NSIDE
             eqmap=hp.pixelfunc.ud_grade(eqmap,NSIDE)
         
+        if not np.sum(eqmap):
+            return np.zeros(len(eqmap))
         if smoothing:
             eqmap = hp.smoothing(eqmap, sigma=np.deg2rad(smoothing),verbose=False,lmax=64)
         
-        eqmap = eqmap-1.*np.min(eqmap)
+        posmap = eqmap-1.*np.min(eqmap)
+        eqmap[eqmap<0.]=0.
         if not np.sum(eqmap):
             eqmap = np.ones(len(eqmap))
-        return eqmap/float(np.sum(eqmap))
+        return eqmap/float(np.sum(eqmap)), posmap/float(np.sum(posmap))
 
 
 def Make2MRSMap(redshiftcutlow=0.00, redshiftcuthigh=0.173, nside=NSIDE):
@@ -117,7 +146,7 @@ Zarr = np.linspace(0., zmax, zslices)
 TomoMaps={}
 for i in range(len(Zarr)-1):
     print 'Loading map in range ', Zarr[i], ' to ', Zarr[i+1]
-    TomoMaps[float('%.4g' % Zarr[i])] = TwoMRSMap(Make2MRSMap(Zarr[i],  Zarr[i+1], NSIDE), "SourceDist", 0.)
+    TomoMaps[float('%.4g' % Zarr[i])] = TwoMRSMap(Make2MRSMap(Zarr[i],  Zarr[i+1], NSIDE), "TwoMRSDist", 0.)
 
 #print sorted(TomoMaps.keys())
 
@@ -142,11 +171,14 @@ def GeneRateSources(nsources):
     return np.vstack((ras, decs, redshifts))
 
 
-def MakeGeneratedMap(twomrsarr, redshiftcutlow=0.00, redshiftcuthigh=0.173, nside=NSIDE):
+def MakeGeneratedMap(twomrsarr, redshiftcutlow=0.00, redshiftcuthigh=0.173, nside=NSIDE, lumfunc=False):
     #twomrsarr = np.vstack((ras, decs, redshifts))
     twomrsarr = twomrsarr.transpose()[twomrsarr[2]<redshiftcuthigh].transpose()
     twomrsarr = twomrsarr.transpose()[twomrsarr[2]>redshiftcutlow].transpose()
-    return scattomap(twomrsarr[1], twomrsarr[0], nside)
+    weights=None
+    if lumfunc:
+        weights = np.power(10., np.random.normal(0.0, 0.4472, len(twomrsarr[1])))
+    return scattomap(twomrsarr[1], twomrsarr[0], nside, weights=weights)
 
 #print len(decs), len(ras), nsources
 
@@ -181,6 +213,7 @@ def MakeGeneratedMap(twomrsarr, redshiftcutlow=0.00, redshiftcuthigh=0.173, nsid
 
 
 print 'Loading File'
+
 propagated = np.genfromtxt('Outputs/'+str(A)+'_'+str(Z)+'/MinEn53.0MaxEn400.0_InSpecIndex'+str(spectralindex)+'_StartDist500.0_N1000000_Seq0.txt')
 
 
@@ -208,15 +241,15 @@ weights = np.repeat(weights, counts)
 weights = weights[propagated.transpose()[3]>ethresh]
 propagated=propagated[propagated.transpose()[3]>ethresh]
 
-histaz = np.histogram2d(propagated.transpose()[1], propagated.transpose()[2], weights=weights, bins=[27,56], range=[[0,27],[1,57]])
-zbins = histaz[1]
-abins = histaz[2]
-histazobtained = histaz[0]/np.sum(histaz[0])
+#histaz = np.histogram2d(propagated.transpose()[1], propagated.transpose()[2], weights=weights, bins=[27,56], range=[[0,27],[1,57]])
+#zbins = histaz[1]
+#abins = histaz[2]
+#histazobtained = histaz[0]/np.sum(histaz[0])
 
-distatthreshold={}
+#distatthreshold={}
 
-zindices = np.digitize(propagated.transpose()[1], zbins, right=True)
-aindices = np.digitize(propagated.transpose()[2], abins, right=True)
+#zindices = np.digitize(propagated.transpose()[1], zbins, right=True)
+#aindices = np.digitize(propagated.transpose()[2], abins, right=True)
 
 #distatinjection={}
 
@@ -229,7 +262,7 @@ aindices = np.digitize(propagated.transpose()[2], abins, right=True)
 #meandistatinjection=[]
 weighttot = np.sum(weights)
 
-for count in range(0,nsamples):
+for count in range(0+offset,nsamples+offset):
     fname=fnamebase+'S'+str(count)+'_'
     
     print 'F: ', fnamebase
@@ -260,61 +293,77 @@ for count in range(0,nsamples):
 
     redshifts = twomrsarr[2]
     for i in range(len(Zarr)-1):
-        try:
-            print 'Now processing ', Zarr[i], ' to ', Zarr[i+1], 'i.e', comoving_distance(Zarr[i]), ' to ', comoving_distance(Zarr[i+1])
-            meddist = (comoving_distance(Zarr[i]) + comoving_distance(Zarr[i+1]))/2.
-            Nsourceslice[float('%.4g' % Zarr[i])] = len(redshifts[(redshifts>Zarr[i])*(redshifts<Zarr[i+1])])
-            print 'Sources in slice, total ',   Nsourceslice[float('%.4g' % Zarr[i])], nsources
-            slicepropselect = propagated[(propagated.transpose()[0]>comoving_distance(Zarr[i]))*(propagated.transpose()[0]<comoving_distance(Zarr[i+1]))]
-            sliceweights = weights[(propagated.transpose()[0]>comoving_distance(Zarr[i]))*(propagated.transpose()[0]<comoving_distance(Zarr[i+1]))]
-            histazslice[float('%.4g' % Zarr[i])] = np.histogram2d(slicepropselect.transpose()[1], slicepropselect.transpose()[2], weights=sliceweights, bins=[27,56], range=[[0,27],[1,57]])
-            histazslice[float('%.4g' % Zarr[i])] = histazslice[float('%.4g' % Zarr[i])][0]/np.sum(histazslice[float('%.4g' % Zarr[i])][0])
-            comphistlist.append(histazslice[float('%.4g' % Zarr[i])])
-            medenergy = np.sum(slicepropselect.transpose()[3]*sliceweights)/np.sum(sliceweights)
-            energy1=quantile(slicepropselect.transpose()[3], sliceweights, 0.1)
-            energy5=quantile(slicepropselect.transpose()[3], sliceweights, 0.5)
-            energy9=quantile(slicepropselect.transpose()[3], sliceweights, 0.9)
-            medatonum = np.sum(slicepropselect.transpose()[1]*sliceweights)/np.sum(sliceweights)
-            atonu1=quantile(slicepropselect.transpose()[1], sliceweights, 0.1)
-            atonu5=quantile(slicepropselect.transpose()[1], sliceweights, 0.5)
-            atonu9=quantile(slicepropselect.transpose()[1], sliceweights, 0.9)
-            print 'Mean Energy from this slice', medenergy
-            print 'Composition from this slice', histazslice[float('%.4g' % Zarr[i])]
-            print 'Mean atomic number from this slice', medatonum
-            medano.append(medatonum)
-            ano1.append(atonu1)
-            ano5.append(atonu5)
-            ano9.append(atonu9)
-            meden.append(medenergy)
-            en1.append(energy1)
-            en5.append(energy5)
-            en9.append(energy9)
-            Zato = (medatonum + Z)/2.
-            defang = 0.025*np.sqrt(meddist/coherencelength)*(coherencelength/10.)*(magfield/1e-11)*(100./medenergy)*Zato
-            print 'Deflection ', defang
-            GenerateMaps[float('%.4g' % Zarr[i])] = TwoMRSMap(MakeGeneratedMap(twomrsarr, Zarr[i],  Zarr[i+1], NSIDE), "SourceDist", defang)
-            weight = float(Nsourceslice[float('%.4g' % Zarr[i])])/float(nsources)/4./np.pi/meddist**2.
-            extweight = np.sum(sliceweights)/weighttot
-            print 'weight due to extinction', extweight
-            weight = weight*extweight
-            arrmap = arrmap + weight*GenerateMaps[float('%.4g' % Zarr[i])].EqNormMap
-            totmap = totmap + GenerateMaps[float('%.4g' % Zarr[i])].EqNormMap
-            meddistmap = meddistmap + meddist*GenerateMaps[float('%.4g' % Zarr[i])].EqNormMap
-            print meddist, weight,  GenerateMaps[float('%.4g' % Zarr[i])].EqNormMap
-        except:
-            print 'Stopping at slice no :', i
-            break
+        #try:
+        print 'Now processing ', Zarr[i], ' to ', Zarr[i+1], 'i.e', comoving_distance(Zarr[i]), ' to ', comoving_distance(Zarr[i+1])
+        meddist = (comoving_distance(Zarr[i]) + comoving_distance(Zarr[i+1]))/2.
+        Nsourceslice = len(redshifts[(redshifts>Zarr[i])*(redshifts<Zarr[i+1])])
+        print 'Sources in slice, total ',   Nsourceslice, nsources
+        slicepropselect = propagated[(propagated.transpose()[0]>comoving_distance(Zarr[i]))*(propagated.transpose()[0]<comoving_distance(Zarr[i+1]))]
+        sliceweights = weights[(propagated.transpose()[0]>comoving_distance(Zarr[i]))*(propagated.transpose()[0]<comoving_distance(Zarr[i+1]))]
+        histazslice = np.histogram2d(slicepropselect.transpose()[1], slicepropselect.transpose()[2], weights=sliceweights, bins=[27,56], range=[[0,27],[1,57]])
+        histazslice = histazslice[0]/np.sum(histazslice[0])
+        comphistlist.append(histazslice)
+        medenergy = np.sum(slicepropselect.transpose()[3]*sliceweights)/np.sum(sliceweights)
+        energy1=quantile(slicepropselect.transpose()[3], sliceweights, 0.1)
+        energy5=quantile(slicepropselect.transpose()[3], sliceweights, 0.5)
+        energy9=quantile(slicepropselect.transpose()[3], sliceweights, 0.9)
+        medatonum = np.sum(slicepropselect.transpose()[1]*sliceweights)/np.sum(sliceweights)
+        atonu1=quantile(slicepropselect.transpose()[1], sliceweights, 0.1)
+        atonu5=quantile(slicepropselect.transpose()[1], sliceweights, 0.5)
+        atonu9=quantile(slicepropselect.transpose()[1], sliceweights, 0.9)
+        print 'Mean Energy from this slice', medenergy
+        #print 'Composition from this slice', histazslice
+        print 'Mean atomic number from this slice', medatonum
+        medano.append(medatonum)
+        ano1.append(atonu1)
+        ano5.append(atonu5)
+        ano9.append(atonu9)
+        meden.append(medenergy)
+        en1.append(energy1)
+        en5.append(energy5)
+        en9.append(energy9)
+        Zato = (medatonum + Z)/2.
+        if not Nsourceslice:
+            continue
+        defang = 0.025*np.sqrt(meddist/coherencelength)*(coherencelength/10.)*(magfield/1e-11)*(100./medenergy)*Zato
+        print 'Deflection ', defang    
+        GenerateMaps = TwoMRSMap(MakeGeneratedMap(twomrsarr, Zarr[i],  Zarr[i+1], NSIDE, lumfunc), "SourceDist", defang)
+        weight = float(Nsourceslice)/float(nsources)/4./np.pi/meddist**2.
+        extweight = np.sum(sliceweights)/weighttot
+        print 'weight due to extinction', extweight
+        weight = weight*extweight
+        arrmap = arrmap + weight*GenerateMaps.EqNormMap
+        totmap = totmap + GenerateMaps.PosMap
+        if np.any(np.isnan(GenerateMaps.EqNormMap)):
+            print 'Nans in EqNormMap'
+        if np.any(np.isnan(GenerateMaps.EqNormMap)):
+            print 'Nans in PosMap'
+        meddistmap = meddistmap + meddist*GenerateMaps.PosMap
+        print meddist, weight,  GenerateMaps.EqNormMap
+        #except:
+            #print 'Stopping at slice no :', i
+            #break
         
-
+    if np.any(np.isnan(1./totmap)):
+        print 'NaNs in Totmap inverse'
+        print np.min(totmap)
     arrmap = arrmap/np.sum(arrmap)
     meddistmap = meddistmap/totmap
     
+    if np.any(np.isnan(meddistmap)):
+        meddistmap[np.isnan(meddistmap)] = Radius
+    
     savemap = np.vstack([arrmap, meddistmap])
+    if np.any(np.isnan(np.vstack([arrmap, meddistmap]))):
+        print 'NaNs in Map'
     np.savetxt(fname+'Map.txt', savemap, delimiter="|")
     
     if (otpf) and (not count):
         np.savetxt(fname+'CompHist.txt', np.vstack(comphistlist), delimiter="|")
+        print len(Zarr), len(medano), len(ano1), len(ano5), len(ano9), len(meden), len(en1), len(en5), len(en9), i
         np.savetxt(fname+'CompEn.txt', np.vstack([Zarr[0:i-1], medano[0:i-1], ano1[0:i-1], ano5[0:i-1], ano9[0:i-1], meden[0:i-1], en1[0:i-1], en5[0:i-1], en9[0:i-1]]), delimiter="|")
+        if np.any(np.isnan(np.vstack([Zarr[0:i-1], medano[0:i-1], ano1[0:i-1], ano5[0:i-1], ano9[0:i-1], meden[0:i-1], en1[0:i-1], en5[0:i-1], en9[0:i-1]]))):
+            print 'NaNs in CompEn'
     
     
     

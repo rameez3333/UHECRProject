@@ -36,8 +36,8 @@ z = twomrsarr[2]/299792.458
 z = twomrsarr[2]/299792.458
 
 map1 = scattomap(twomrsarr[1], twomrsarr[0])
-hp.mollview(map1)
-plt.show()
+#hp.mollview(map1)
+#plt.show()
 
 #print 'Selecting AGNs'
 #y = np.asarray(map(lambda x : True if x[0]=='-' else False, twomrstype))
@@ -90,8 +90,8 @@ dist = InterpolatedUnivariateSpline(detectedenergies, meandistatdetection)
     
 #plt.plot(injectedenergies, meandistatinjection)
 
-plt.plot(detectedenergies, meandistatdetection, color='green', linewidth=2, alpha=0.5)
-plt.show()
+#plt.plot(detectedenergies, meandistatdetection, color='green', linewidth=2, alpha=0.5)
+#plt.show()
 
 def generatepowerlaw(index, rmin, rmax, size):
     arr = np.random.uniform(np.power(rmin, -1.*index), np.power(rmax, -1.*index), size)
@@ -157,17 +157,17 @@ for injectionspectralindex in injectionspectralindices:
     bins = np.arange(0, 600, 2)
 
     #plt.hist(distances, color='blue', alpha=0.5, bins=bins)
-    plt.hist(sampleddistances[injectionspectralindex], color=colours[i], alpha=0.2, bins=bins, label=str(injectionspectralindex))
+    #plt.hist(sampleddistances[injectionspectralindex], color=colours[i], alpha=0.2, bins=bins, label=str(injectionspectralindex))
     i=i+1
-plt.legend(loc='best', fontsize=15) 
-plt.xlabel('Distance (MPc)')
-plt.ylabel('Events')
-plt.yscale('log')
+#plt.legend(loc='best', fontsize=15) 
+#plt.xlabel('Distance (Mpc)')
+#plt.ylabel('Events')
+#plt.yscale('log')
     #plt.show()
 
-plt.savefig('DistrosProtonOnly.png')
+#plt.savefig('DistrosProtonOnly.png')
         
-plt.show()
+#plt.show()
 
 del plt
 
@@ -198,7 +198,7 @@ for b in bins[1:]:
     print slicemap
     print avmap
     print propweight
-    hp.mollview(slicemap, title=str(b)+ ' MPc')
+    #hp.mollview(slicemap, title=str(b)+ ' MPc')
     plt.savefig('2MRSMaps/map'+str(len(ncount))+'.png')
     if b<120:
         avmap = avmap+propweight*geoweight*slicemap
@@ -211,11 +211,12 @@ for b in bins[1:]:
 avmap = avmap/np.sum(avmap)
 
 plt.plot(bins[1:], ncount)
-plt.xlabel('Distance (MPc)')
-plt.ylabel('NSources in 2MRS within 2MPc shells')
+plt.xlabel('Distance (Mpc)', fontsize=15)
+plt.ylabel('No of Sources in 2MRS within 2Mpc shells', fontsize=15)
+plt.savefig('NsourcesVsDist.png')
 plt.show()
 
-hp.mollview(avmap, title="Weighted 2MRS")
-plt.savefig('2MRSProjectedMapPureProtonFineBin.png')
-plt.show()
-np.savetxt('2MRSProjectedMapPureProtonFineBin.txt', avmap, delimiter="|")
+#hp.mollview(avmap, title="Weighted 2MRS")
+#plt.savefig('2MRSProjectedMapPureProtonFineBin.png')
+#plt.show()
+#np.savetxt('2MRSProjectedMapPureProtonFineBin.txt', avmap, delimiter="|")

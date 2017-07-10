@@ -16,7 +16,7 @@ parser.add_option("-m", "--minenerg", action="store", type="float", default=53.0
 parser.add_option("-n", "--howmany", action="store", type="int", default=1, dest="HOWMANY", help="How many CRs to propagate")
 parser.add_option("-f", "--firstseq", action="store", type="int", default=0, dest="FIRSTSEQ", help="The sequence number")
 parser.add_option("-s", "--specindex", action="store", type="float", default=4.3, dest="SPECINDEX", help="The spectral index")
-
+parser.add_option("-p", "--pshirkov", action = "store_true", default=False, dest="PSHIRKOV", help = "Use the PT2011 field instead of the JF12Field?")
 (options, args) = parser.parse_args()
 
 
@@ -26,12 +26,15 @@ minenerg = options.MINENERG
 howmany = options.HOWMANY
 sequence = options.FIRSTSEQ
 detectedspectralindex = options.SPECINDEX
+pshirkovfield = options.PSHIRKOV
 
-
-B = JF12Field()
-seed = 691342
-B.randomStriated(seed)
-B.randomTurbulent(seed)
+if not pshirkovfield:
+    B = JF12Field()
+    seed = 691342
+    B.randomStriated(seed)
+    B.randomTurbulent(seed)
+else:
+    B = PshirkovField()
 
 sim = ModuleList()
 sim.add(PropagationCK(B, 1e-4, 0.1 * parsec, 100 * parsec))
@@ -72,8 +75,10 @@ def propagate(A, Z, energy, lat, lon, seq=0):
     return lonr+np.pi, np.pi/2. - latr, lonp+np.pi, np.pi/2.-latp
     
 energies = generatepowerlaw(detectedspectralindex, minenerg, 200., 100000)    
-
-fout = open('Outputs/'+str(massno)+'_'+str(atomicno)+'/MinEn'+str(minenerg)+'_N'+str(howmany)+'_SpecI'+str(detectedspectralindex)+'_Seq'+str(sequence)+'GalBack_Manual.txt', "w")
+if not pshirkovfield:
+    fout = open('Outputs/'+str(massno)+'_'+str(atomicno)+'/MinEn'+str(minenerg)+'_N'+str(howmany)+'_SpecI'+str(detectedspectralindex)+'_Seq'+str(sequence)+'GalBack_Manual.txt', "w")
+else:
+    fout = open('Outputs/'+str(massno)+'_'+str(atomicno)+'/MinEn'+str(minenerg)+'_N'+str(howmany)+'_SpecI'+str(detectedspectralindex)+'_Seq'+str(sequence)+'PT2011GalBack_Manual.txt', "w")
 latrlist = []
 for i in range(0, hp.nside2npix(nside)):
     dec, ra = np.deg2rad((90. - np.rad2deg(hp.pix2ang(nside, i)[0]))), hp.pix2ang(nside, i)[1]
